@@ -69,21 +69,31 @@ Uploaded images live in **R2** under `photos/<random>.<ext>` and `logos/<random>
 Let your coding agent (Claude Code, Codex, Cursor and others) do the whole setup. Copy this prompt with the copy button on the box and paste it into your agent. It will ask you for a password and an optional domain before deploying anything.
 
 ```text
-Set up ProofWall for me: a self-hosted testimonial collector that runs on my Cloudflare account.
+Set up ProofWall for me: a self-hosted testimonial collector
+that runs on my Cloudflare account.
 
 Repository: https://github.com/QuantumCoderSys/proofwall
 
-1. Clone the repository and read AGENTS.md. It has the exact setup steps; follow them.
+1. Clone the repository and read AGENTS.md. It has the exact
+   setup steps; follow them.
 2. Before deploying, ask me for:
    a. the dashboard password I want to use,
-   b. a custom domain, if I want one (its parent domain must already be on my Cloudflare account),
+   b. a custom domain, if I want one (its parent domain must
+      already be on my Cloudflare account),
    c. which Cloudflare account to use, if I have more than one.
-3. Check that Node 20+ is installed and that Wrangler is logged in (run `npx wrangler login` if not; I'll approve it in my browser).
-4. Deploy: create the D1 database and R2 bucket, set ADMIN_PASSWORD (mine) and a freshly generated SESSION_SECRET as Worker secrets, attach my custom domain if I gave one, and apply the D1 migrations.
-5. Verify: the site loads over HTTPS, /login shows "Welcome back", and `wrangler secret list` shows both secrets.
+3. Check that Node 20+ is installed and that Wrangler is logged
+   in (run `npx wrangler login` if not; I'll approve it in my
+   browser).
+4. Deploy: create the D1 database and R2 bucket, set
+   ADMIN_PASSWORD (mine) and a freshly generated SESSION_SECRET
+   as Worker secrets, attach my custom domain if I gave one, and
+   apply the D1 migrations.
+5. Verify: the site loads over HTTPS, /login shows
+   "Welcome back", and `wrangler secret list` shows both secrets.
 
-Never print, log or commit secret values, and don't add my domain to wrangler.toml.
-When you're done, tell me the URL and how to sign in.
+Never print, log or commit secret values, and don't add my
+domain to wrangler.toml. When you're done, tell me the URL and
+how to sign in.
 ```
 
 ---
