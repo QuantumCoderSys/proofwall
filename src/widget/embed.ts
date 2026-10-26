@@ -12,6 +12,7 @@
  * All testimonial text is inserted as text nodes, never as HTML.
  */
 import { avatarColors, initials } from '../shared/avatar';
+import { sourceLabel } from '../shared/source';
 import type { Layout, MountOptions, PublicPayload, PublicTestimonial, Theme } from '../shared/types';
 
 const VERSION = '1.0.0';
@@ -115,7 +116,8 @@ const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion:
 
 // ── Pieces ────────────────────────────────────────────────────────────────
 
-function stars(rating: number): HTMLElement {
+function stars(rating: number | null): HTMLElement | null {
+  if (rating === null) return null;
   const wrap = h('div', { class: 'pw-stars', role: 'img', 'aria-label': `${rating} out of 5 stars` });
   for (let i = 1; i <= 5; i++) {
     const svg = document.createElementNS(SVG_NS, 'svg');
@@ -143,6 +145,11 @@ function card(t: PublicTestimonial, variant: 'wall' | 'carousel' | 'single'): HT
   const classes = ['pw-card'];
   if (t.featured) classes.push('is-featured');
   if (variant === 'single') classes.push('is-single');
+  const label = sourceLabel(t.source, t.sourceUrl);
+  const via =
+    label && t.sourceUrl && /^https?:\/\//.test(t.sourceUrl)
+      ? h('a', { class: 'pw-source', href: t.sourceUrl, target: '_blank', rel: 'noopener nofollow' }, `via ${label}`)
+      : null;
   return h(
     'figure',
     { class: classes.join(' ') },
@@ -153,6 +160,7 @@ function card(t: PublicTestimonial, variant: 'wall' | 'carousel' | 'single'): HT
       { class: 'pw-author' },
       avatar(t),
       h('div', { class: 'pw-who' }, h('div', { class: 'pw-name' }, t.name), t.role && h('div', { class: 'pw-role' }, t.role)),
+      via,
     ),
   );
 }
@@ -463,7 +471,12 @@ function styles(font: 'default' | 'inherit'): string {
   display: inline-grid; place-items: center; font-size: 14px; font-weight: 600;
   box-shadow: 0 0 0 1px rgba(0,0,0,.06); background: var(--off);
 }
-.pw-who { min-width: 0; line-height: 1.35; }
+.pw-who { min-width: 0; line-height: 1.35; flex: 1; }
+.pw-source {
+  flex: none; align-self: flex-end; font-size: 12px; line-height: 1.35; color: var(--muted);
+  text-decoration: none; white-space: nowrap;
+}
+.pw-source:hover { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
 .pw-name { font-size: 14px; font-weight: 600; color: var(--fg); }
 .pw-role { font-size: 13px; color: var(--muted); }
 

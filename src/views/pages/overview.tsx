@@ -19,8 +19,9 @@ export const OverviewPage = (props: OverviewProps) => {
   const pending = props.spaces.reduce((n, s) => n + s.pending, 0);
   const approved = props.spaces.reduce((n, s) => n + s.approved, 0);
   const ratingSum = props.spaces.reduce((n, s) => n + s.approvedRatingSum, 0);
+  const rated = props.spaces.reduce((n, s) => n + s.approvedRated, 0);
   const newThisWeek = props.spaces.reduce((n, s) => n + s.newThisWeek, 0);
-  const average = approved > 0 ? ratingSum / approved : 0;
+  const average = rated > 0 ? ratingSum / rated : 0;
 
   return (
     <AppShell
@@ -61,7 +62,7 @@ export const OverviewPage = (props: OverviewProps) => {
               Approved & public
             </Stat>
             <Stat label="Average rating" icon="star" value={formatRating(average)}>
-              {approved > 0 ? (
+              {rated > 0 ? (
                 <span class="stat-stars">
                   <Stars rating={Math.round(average)} size={11} />
                 </span>

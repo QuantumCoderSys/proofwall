@@ -16,12 +16,16 @@ export interface PublicSpace {
 
 export interface PublicTestimonial {
   id: string;
-  rating: number;
+  /** null for imported posts that never had a star rating. */
+  rating: number | null;
   body: string;
   name: string;
   role: string | null;
   photoUrl: string | null;
   featured: boolean;
+  /** Where an imported testimonial came from ('web', 'x', 'bluesky'); null for form submissions. */
+  source: string | null;
+  sourceUrl: string | null;
   createdAt: number;
 }
 
@@ -41,5 +45,6 @@ export interface MountOptions {
 export interface PublicPayload {
   space: PublicSpace;
   testimonials: PublicTestimonial[];
-  stats: { count: number; average: number };
+  /** `average` is over the `rated` testimonials only. */
+  stats: { count: number; rated: number; average: number };
 }

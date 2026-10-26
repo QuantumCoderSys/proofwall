@@ -2,12 +2,18 @@ import { Hono, type Context } from 'hono';
 import type { AppEnv } from '../env';
 import { requireAuth, safeNext, wantsJson } from '../lib/auth';
 import { DEFAULT_ACCENT, normalizeHex } from '../lib/color';
+import { checkSource } from '../lib/auto-import';
 import {
+  addSource,
+  deleteSource,
   deleteSpace,
   deleteTestimonial,
+  getSource,
   getSpace,
   getTestimonial,
+  insertImported,
   insertSpace,
+  listSources,
   listSpaceSummaries,
   listTestimonials,
   recentPending,
@@ -16,13 +22,16 @@ import {
   slugTaken,
   STATUSES,
   updateSpace,
+  type ImportedInput,
   type Status,
 } from '../lib/db';
 import { field, originOf } from '../lib/http';
 import { newId, SLUG_PATTERN, slugify } from '../lib/ids';
+import { extractFromUrl, ImportError, isSinglePost, parseImportUrl, sanitizeCandidate } from '../lib/importer';
 import { deleteMedia, isFile, storeImage } from '../lib/uploads';
 import { toastMessage } from '../views/document';
 import { OverviewPage } from '../views/pages/overview';
+import { SpaceImportPage, type ManualErrors, type ManualValues } from '../views/pages/space-import';
 import { SpaceInboxPage, type InboxFilter } from '../views/pages/space-inbox';
 import { NewSpacePage, type NewSpaceErrors } from '../views/pages/space-new';
 import { SpaceSettingsPage, type SettingsErrors, type SettingsValues } from '../views/pages/space-settings';
@@ -228,9 +237,144 @@ dashboard.post('/testimonials/:id/delete', async (c) => {
   const body = await c.req.parseBody();
   const t = await getTestimonial(c.env.DB, c.req.param('id'));
   if (!t) return fail(c, 'That testimonial no longer exists.', 404);
-  await deleteTestimonial(c.env.DB, t.id);
+  await deleteTestimonial(c.env.DB, t);
   await deleteMedia(c.env, [t.photoKey]);
   return done(c, body.next, 'deleted', `/app/spaces/${t.spaceId}`);
+});
+
+// ── Imports ───────────────────────────────────────────────────────────────
+
+async function importPage(c: Context<AppEnv>, spaceId: string) {
+  const [base, space, sources] = await Promise.all([
+    shell(c),
+    getSpace(c.env.DB, spaceId),
+    listSources(c.env.DB, spaceId),
+  ]);
+  return space ? { ...base, space, sources } : null;
+}
+
+dashboard.get('/spaces/:id/import', async (c) => {
+  const page = await importPage(c, c.req.param('id'));
+  if (!page) return c.notFound();
+  return c.html(<SpaceImportPage {...page} />);
+});
+
+/** Fetches the link and shows what was found, without saving anything yet. */
+dashboard.post('/spaces/:id/import/preview', async (c) => {
+  const page = await importPage(c, c.req.param('id'));
+  if (!page) return c.notFound();
+  const url = field(await c.req.parseBody(), 'url');
+  try {
+    const preview = await extractFromUrl(url, page.host);
+    return c.html(<SpaceImportPage {...page} url={url} preview={preview} watchable={!isSinglePost(url)} />);
+  } catch (err) {
+    if (!(err instanceof ImportError)) throw err;
+    return c.html(<SpaceImportPage {...page} url={url} error={err.message} />, 422);
+  }
+});
+
+/** Saves the testimonials picked from a preview, or one added by hand. */
+dashboard.post('/spaces/:id/import', async (c) => {
+  const space = await getSpace(c.env.DB, c.req.param('id'));
+  if (!space) return c.notFound();
+  const body = await c.req.parseBody({ all: true });
+  const status: Status = field(body, 'status') === 'approved' ? 'approved' : 'pending';
+  let items: ImportedInput[] = [];
+
+  if (field(body, 'manual') === '1') {
+    const values: ManualValues = {
+      body: field(body, 'body').replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n'),
+      name: field(body, 'name'),
+      role: field(body, 'role'),
+      rating: field(body, 'rating'),
+      sourceUrl: field(body, 'source_url'),
+      status,
+    };
+    const errors: ManualErrors = {};
+    const rating = values.rating ? Number(values.rating) : null;
+    if (values.body.length < 10) errors.body = 'Paste at least a sentence or two.';
+    else if (values.body.length > 2000) errors.body = 'Please keep it under 2,000 characters.';
+    if (values.name.length > 80) errors.name = 'Please keep the name under 80 characters.';
+    if (values.role.length > 100) errors.role = 'Please keep this under 100 characters.';
+    if (rating !== null && !(Number.isInteger(rating) && rating >= 1 && rating <= 5)) errors.rating = 'Pick a rating.';
+    let sourceUrl: string | null = null;
+    if (values.sourceUrl) {
+      try {
+        sourceUrl = parseImportUrl(values.sourceUrl);
+      } catch (err) {
+        errors.sourceUrl = err instanceof ImportError ? err.message : 'That link looks wrong.';
+      }
+    }
+    if (Object.keys(errors).length > 0) {
+      const page = await importPage(c, space.id);
+      return c.html(<SpaceImportPage {...page!} manual={values} manualErrors={errors} />, 422);
+    }
+    items = [
+      {
+        body: values.body,
+        name: values.name || null,
+        role: values.role || null,
+        rating,
+        source: sourceUrl ? 'web' : null,
+        sourceUrl,
+        externalId: `manual:${newId()}`,
+        createdAt: Date.now(),
+      },
+    ];
+  } else {
+    const picked = body.item;
+    const raw = Array.isArray(picked) ? picked : picked ? [picked] : [];
+    for (const value of raw) {
+      try {
+        const candidate = sanitizeCandidate(JSON.parse(String(value)));
+        if (candidate) items.push(candidate);
+      } catch {
+        // Ignore anything that didn't round-trip cleanly.
+      }
+    }
+    const watch = field(body, 'watch') === '1' ? field(body, 'url') : '';
+    if (watch && !isSinglePost(watch)) {
+      try {
+        await addSource(c.env.DB, space.id, parseImportUrl(watch, new URL(c.req.url).host));
+      } catch (err) {
+        if (!(err instanceof ImportError)) throw err;
+      }
+    }
+  }
+
+  const added = await insertImported(c.env.DB, space.id, items, status);
+  const toast =
+    field(body, 'manual') === '1'
+      ? 'added'
+      : items.length === 0
+        ? 'nothing-selected'
+        : added === 0
+          ? 'nothing-new'
+          : status === 'approved'
+            ? 'imported-approved'
+            : 'imported';
+  const filter = added > 0 ? status : 'all';
+  return c.redirect(`/app/spaces/${space.id}?status=${filter}&t=${toast}`, 303);
+});
+
+dashboard.post('/sources/:id/run', async (c) => {
+  const body = await c.req.parseBody();
+  const source = await getSource(c.env.DB, c.req.param('id'));
+  if (!source) return fail(c, 'That link is no longer being checked.', 404);
+  const result = await checkSource(c.env, source);
+  if (wantsJson(c)) {
+    const message = result.added > 0 ? `Added ${result.added} new — they're waiting for review` : result.status;
+    return c.json({ ok: true, toast: message });
+  }
+  return done(c, body.next, 'checked', `/app/spaces/${source.spaceId}/import`);
+});
+
+dashboard.post('/sources/:id/delete', async (c) => {
+  const body = await c.req.parseBody();
+  const source = await getSource(c.env.DB, c.req.param('id'));
+  if (!source) return fail(c, 'That link is no longer being checked.', 404);
+  await deleteSource(c.env.DB, source.id);
+  return done(c, body.next, 'source-removed', `/app/spaces/${source.spaceId}/import`);
 });
 
 export default dashboard;

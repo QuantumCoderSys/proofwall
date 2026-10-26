@@ -1,4 +1,6 @@
 import { ANONYMOUS } from '../shared/avatar';
+import type { ImportKind } from '../shared/source';
+import { newId } from './ids';
 
 export type Status = 'pending' | 'approved' | 'rejected';
 export const STATUSES: readonly Status[] = ['pending', 'approved', 'rejected'];
@@ -25,6 +27,7 @@ export interface SpaceSummary extends Space {
   rejected: number;
   total: number;
   approvedRatingSum: number;
+  approvedRated: number;
   newThisWeek: number;
 }
 
@@ -32,12 +35,15 @@ export interface Testimonial {
   id: string;
   spaceId: string;
   status: Status;
-  rating: number;
+  rating: number | null;
   body: string;
   authorName: string | null;
   authorRole: string | null;
   photoKey: string | null;
   featured: boolean;
+  source: ImportKind | null;
+  sourceUrl: string | null;
+  externalId: string | null;
   createdAt: number;
   reviewedAt: number | null;
 }
@@ -69,12 +75,15 @@ interface TestimonialRow {
   id: string;
   space_id: string;
   status: Status;
-  rating: number;
+  rating: number | null;
   body: string;
   author_name: string | null;
   author_role: string | null;
   photo_key: string | null;
   featured: number;
+  source: ImportKind | null;
+  source_url: string | null;
+  external_id: string | null;
   created_at: number;
   reviewed_at: number | null;
 }
@@ -105,6 +114,9 @@ const toTestimonial = (r: TestimonialRow): Testimonial => ({
   authorRole: r.author_role,
   photoKey: r.photo_key,
   featured: r.featured === 1,
+  source: r.source,
+  sourceUrl: r.source_url,
+  externalId: r.external_id,
   createdAt: r.created_at,
   reviewedAt: r.reviewed_at,
 });
@@ -134,6 +146,7 @@ export async function listSpaceSummaries(db: D1Database): Promise<SpaceSummary[]
          COALESCE(SUM(t.status = 'rejected'), 0) AS rejected,
          COUNT(t.id) AS total,
          COALESCE(SUM(CASE WHEN t.status = 'approved' THEN t.rating ELSE 0 END), 0) AS approved_rating_sum,
+         COALESCE(SUM(t.status = 'approved' AND t.rating IS NOT NULL), 0) AS approved_rated,
          COALESCE(SUM(t.created_at > ?1), 0) AS new_this_week
        FROM spaces s
        LEFT JOIN testimonials t ON t.space_id = s.id
@@ -148,6 +161,7 @@ export async function listSpaceSummaries(db: D1Database): Promise<SpaceSummary[]
         rejected: number;
         total: number;
         approved_rating_sum: number;
+        approved_rated: number;
         new_this_week: number;
       }
     >();
@@ -158,6 +172,7 @@ export async function listSpaceSummaries(db: D1Database): Promise<SpaceSummary[]
     rejected: r.rejected,
     total: r.total,
     approvedRatingSum: r.approved_rating_sum,
+    approvedRated: r.approved_rated,
     newThisWeek: r.new_this_week,
   }));
 }
@@ -253,6 +268,8 @@ export async function deleteSpace(db: D1Database, id: string): Promise<string[]>
     .all<{ photo_key: string }>();
   await db.batch([
     db.prepare('DELETE FROM testimonials WHERE space_id = ?1').bind(id),
+    db.prepare('DELETE FROM import_sources WHERE space_id = ?1').bind(id),
+    db.prepare('DELETE FROM import_skips WHERE space_id = ?1').bind(id),
     db.prepare('DELETE FROM spaces WHERE id = ?1').bind(id),
   ]);
   return [space.logoKey, ...results.map((r) => r.photo_key)].filter((k): k is string => Boolean(k));
@@ -293,15 +310,19 @@ export async function listApproved(
   return results.map(toTestimonial);
 }
 
-export async function approvedStats(db: D1Database, spaceId: string): Promise<{ count: number; average: number }> {
+/** `average` covers rated testimonials only; imported posts may have no stars. */
+export async function approvedStats(
+  db: D1Database,
+  spaceId: string,
+): Promise<{ count: number; rated: number; average: number }> {
   const row = await db
     .prepare(
-      `SELECT COUNT(*) AS count, COALESCE(AVG(rating), 0) AS average
+      `SELECT COUNT(*) AS count, COUNT(rating) AS rated, COALESCE(AVG(rating), 0) AS average
        FROM testimonials WHERE space_id = ?1 AND status = 'approved'`,
     )
     .bind(spaceId)
-    .first<{ count: number; average: number }>();
-  return { count: row?.count ?? 0, average: Math.round((row?.average ?? 0) * 10) / 10 };
+    .first<{ count: number; rated: number; average: number }>();
+  return { count: row?.count ?? 0, rated: row?.rated ?? 0, average: Math.round((row?.average ?? 0) * 10) / 10 };
 }
 
 export async function recentPending(db: D1Database, limit: number): Promise<TestimonialWithSpace[]> {
@@ -359,6 +380,136 @@ export async function setFeatured(db: D1Database, id: string, featured: boolean)
   await db.prepare('UPDATE testimonials SET featured = ?2 WHERE id = ?1').bind(id, featured ? 1 : 0).run();
 }
 
-export async function deleteTestimonial(db: D1Database, id: string): Promise<void> {
-  await db.prepare('DELETE FROM testimonials WHERE id = ?1').bind(id).run();
+/** Deletes a testimonial. Imported ones are remembered so a re-check doesn't restore them. */
+export async function deleteTestimonial(db: D1Database, t: Testimonial): Promise<void> {
+  const statements = [db.prepare('DELETE FROM testimonials WHERE id = ?1').bind(t.id)];
+  if (t.externalId) {
+    statements.push(
+      db.prepare('INSERT OR IGNORE INTO import_skips (space_id, external_id) VALUES (?1, ?2)').bind(t.spaceId, t.externalId),
+    );
+  }
+  await db.batch(statements);
+}
+
+// ── Imports ───────────────────────────────────────────────────────────────
+
+export interface ImportedInput {
+  body: string;
+  name: string | null;
+  role: string | null;
+  rating: number | null;
+  source: ImportKind | null;
+  sourceUrl: string | null;
+  externalId: string;
+  createdAt: number;
+}
+
+/** Inserts imported testimonials, skipping duplicates and ones the founder deleted. Returns how many were added. */
+export async function insertImported(
+  db: D1Database,
+  spaceId: string,
+  items: ImportedInput[],
+  status: Status,
+): Promise<number> {
+  if (items.length === 0) return 0;
+  const now = Date.now();
+  const results = await db.batch(
+    items.map((t) =>
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO testimonials
+             (id, space_id, status, rating, body, author_name, author_role, source, source_url, external_id, created_at, reviewed_at)
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12
+           WHERE NOT EXISTS (SELECT 1 FROM import_skips WHERE space_id = ?2 AND external_id = ?10)`,
+        )
+        .bind(
+          newId(),
+          spaceId,
+          status,
+          t.rating,
+          t.body,
+          t.name,
+          t.role,
+          t.source,
+          t.sourceUrl,
+          t.externalId,
+          t.createdAt,
+          status === 'pending' ? null : now,
+        ),
+    ),
+  );
+  return results.reduce((n, r) => n + (r.meta.changes ?? 0), 0);
+}
+
+export interface ImportSource {
+  id: string;
+  spaceId: string;
+  url: string;
+  lastRunAt: number | null;
+  lastStatus: string | null;
+  lastAdded: number;
+  createdAt: number;
+}
+
+interface ImportSourceRow {
+  id: string;
+  space_id: string;
+  url: string;
+  last_run_at: number | null;
+  last_status: string | null;
+  last_added: number;
+  created_at: number;
+}
+
+const toSource = (r: ImportSourceRow): ImportSource => ({
+  id: r.id,
+  spaceId: r.space_id,
+  url: r.url,
+  lastRunAt: r.last_run_at,
+  lastStatus: r.last_status,
+  lastAdded: r.last_added,
+  createdAt: r.created_at,
+});
+
+export async function listSources(db: D1Database, spaceId: string): Promise<ImportSource[]> {
+  const { results } = await db
+    .prepare('SELECT * FROM import_sources WHERE space_id = ?1 ORDER BY created_at ASC')
+    .bind(spaceId)
+    .all<ImportSourceRow>();
+  return results.map(toSource);
+}
+
+export async function getSource(db: D1Database, id: string): Promise<ImportSource | null> {
+  const row = await db.prepare('SELECT * FROM import_sources WHERE id = ?1').bind(id).first<ImportSourceRow>();
+  return row ? toSource(row) : null;
+}
+
+export async function addSource(db: D1Database, spaceId: string, url: string): Promise<void> {
+  await db
+    .prepare('INSERT OR IGNORE INTO import_sources (id, space_id, url, created_at) VALUES (?1, ?2, ?3, ?4)')
+    .bind(newId(), spaceId, url, Date.now())
+    .run();
+}
+
+export async function deleteSource(db: D1Database, id: string): Promise<void> {
+  await db.prepare('DELETE FROM import_sources WHERE id = ?1').bind(id).run();
+}
+
+/** Sources not checked since `before`, oldest first. */
+export async function dueSources(db: D1Database, before: number, limit: number): Promise<ImportSource[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM import_sources WHERE last_run_at IS NULL OR last_run_at < ?1
+       ORDER BY COALESCE(last_run_at, 0) ASC LIMIT ?2`,
+    )
+    .bind(before, limit)
+    .all<ImportSourceRow>();
+  return results.map(toSource);
+}
+
+export async function markSourceRun(db: D1Database, id: string, status: string, added: number): Promise<void> {
+  await db
+    .prepare('UPDATE import_sources SET last_run_at = ?2, last_status = ?3, last_added = ?4 WHERE id = ?1')
+    .bind(id, Date.now(), status, added)
+    .run();
 }

@@ -16,6 +16,13 @@ const TOASTS: Record<string, string> = {
   unfeatured: 'Unpinned',
   deleted: 'Deleted',
   'space-deleted': 'Space deleted',
+  imported: 'Imported — they’re waiting for your review',
+  'imported-approved': 'Imported and published',
+  'nothing-new': 'Nothing new — those were already imported',
+  'nothing-selected': 'Nothing was selected to import',
+  added: 'Testimonial added',
+  checked: 'Checked for new testimonials',
+  'source-removed': 'Stopped checking that link',
 };
 
 export function toastMessage(code: string | undefined): string | undefined {

@@ -30,6 +30,10 @@ migrations_dir = "migrations"
 binding = "MEDIA"
 bucket_name = "proofwall-media"
 
+# Re-checks saved import links once a day (free; see "Import from the web" in the README).
+[triggers]
+crons = ["23 7 * * *"]
+
 [vars]
 # Where "Powered by ProofWall" links to. Leave empty to link to this deployment's homepage.
 POWERED_BY_URL = ""

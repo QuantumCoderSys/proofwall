@@ -4,7 +4,7 @@ import { AppShell } from './app-shell';
 import { CopyButton, SpaceLogo } from './components';
 import { Icon } from './icons';
 
-export type SpaceTab = 'testimonials' | 'share' | 'settings';
+export type SpaceTab = 'testimonials' | 'import' | 'share' | 'settings';
 
 export interface SpaceLayoutProps {
   host: string;
@@ -60,6 +60,10 @@ export const SpaceLayout = (props: SpaceLayoutProps) => {
           <Icon name="inbox" size={15} />
           Testimonials
           {pending > 0 && <span class="tab-count">{pending}</span>}
+        </a>
+        <a class={tabClass('import')} href={`${base}/import`}>
+          <Icon name="download" size={15} />
+          Import
         </a>
         <a class={tabClass('share')} href={`${base}/share`}>
           <Icon name="code" size={15} />

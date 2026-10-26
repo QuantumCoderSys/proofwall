@@ -45,6 +45,8 @@ api.get('/spaces/:slug', async (c) => {
       role: t.authorRole,
       photoUrl: mediaUrl(origin, t.photoKey),
       featured: t.featured,
+      source: t.source,
+      sourceUrl: t.sourceUrl,
       createdAt: t.createdAt,
     })),
     stats,

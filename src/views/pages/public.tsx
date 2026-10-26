@@ -1,7 +1,7 @@
 import { accentVars } from '../../lib/color';
 import { displayName, spaceCopy, type Space, type Testimonial } from '../../lib/db';
 import { mediaUrl } from '../../lib/uploads';
-import { Avatar, FieldError, PoweredBy, SpaceLogo, Stars } from '../components';
+import { Avatar, FieldError, PoweredBy, SourceLink, SpaceLogo, Stars } from '../components';
 import { Document } from '../document';
 import { Icon, StarGlyph } from '../icons';
 
@@ -263,6 +263,7 @@ export const QuoteCard = ({ t }: { t: Testimonial }) => {
           <div class="q-name">{name}</div>
           {t.authorRole && <div class="q-role">{t.authorRole}</div>}
         </div>
+        <SourceLink source={t.source} url={t.sourceUrl} class="q-source" />
       </figcaption>
     </figure>
   );
@@ -271,7 +272,7 @@ export const QuoteCard = ({ t }: { t: Testimonial }) => {
 export const WallPage = (props: {
   space: Space;
   items: Testimonial[];
-  stats: { count: number; average: number };
+  stats: { count: number; rated: number; average: number };
   poweredByUrl: string;
 }) => {
   const { space, stats } = props;
@@ -287,12 +288,12 @@ export const WallPage = (props: {
         <SpaceBrand space={space} size={40} />
         <h1 class="wall-title">Wall of Love</h1>
         <p class="wall-sub">What people are saying about {space.name}.</p>
-        {stats.count > 0 && (
+        {stats.rated > 0 && (
           <div class="rating-summary">
             <Stars rating={Math.round(stats.average)} size={14} class="accent-stars" />
             <strong>{stats.average.toFixed(1)}</strong>
             <span>
-              from {stats.count} review{stats.count === 1 ? '' : 's'}
+              from {stats.rated} review{stats.rated === 1 ? '' : 's'}
             </span>
           </div>
         )}

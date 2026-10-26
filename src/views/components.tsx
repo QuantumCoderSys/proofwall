@@ -1,17 +1,35 @@
 import type { Child } from 'hono/jsx';
 import { avatarColors, initials } from '../shared/avatar';
+import { sourceLabel } from '../shared/source';
 import { contrastText } from '../lib/color';
 import type { Space, Status } from '../lib/db';
 import { mediaUrl } from '../lib/uploads';
 import { Icon, LogoMark, StarGlyph, type IconName } from './icons';
 
-export const Stars = (props: { rating: number; size?: number; class?: string }) => (
-  <span class={`stars ${props.class ?? ''}`} role="img" aria-label={`${props.rating} out of 5 stars`}>
-    {[1, 2, 3, 4, 5].map((n) => (
-      <StarGlyph size={props.size ?? 14} class={n <= props.rating ? 'star is-on' : 'star'} />
-    ))}
-  </span>
-);
+/** Renders nothing for unrated testimonials (e.g. imported posts). */
+export const Stars = (props: { rating: number | null; size?: number; class?: string }) => {
+  const rating = props.rating;
+  if (rating === null) return null;
+  return (
+    <span class={`stars ${props.class ?? ''}`} role="img" aria-label={`${rating} out of 5 stars`}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <StarGlyph size={props.size ?? 14} class={n <= rating ? 'star is-on' : 'star'} />
+      ))}
+    </span>
+  );
+};
+
+/** "via X ↗" link back to where an imported testimonial was found. */
+export const SourceLink = (props: { source: string | null; url: string | null; class?: string }) => {
+  const label = sourceLabel(props.source, props.url);
+  if (!label || !props.url) return null;
+  return (
+    <a class={props.class ?? 'source-link'} href={props.url} target="_blank" rel="noopener nofollow" title={props.url}>
+      via {label}
+      <Icon name="external" size={11} />
+    </a>
+  );
+};
 
 export const Avatar = (props: { name: string; photoUrl: string | null; size?: number }) => {
   const size = props.size ?? 36;

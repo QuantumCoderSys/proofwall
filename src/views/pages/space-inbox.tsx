@@ -1,7 +1,7 @@
 import { displayName, type Space, type SpaceSummary, type Status, type Testimonial } from '../../lib/db';
 import { formatDate, timeAgo } from '../../lib/format';
 import { mediaUrl } from '../../lib/uploads';
-import { Avatar, EmptyState, StatusPill, Stars } from '../components';
+import { Avatar, EmptyState, SourceLink, StatusPill, Stars } from '../components';
 import { ActionForm } from '../forms';
 import { Icon } from '../icons';
 import { SpaceLayout } from '../space-layout';
@@ -119,7 +119,8 @@ const InboxEmpty = (props: { filter: InboxFilter; space: Space; total: number })
           </a>
         }
       >
-        Share your collection link with a few happy customers. Their testimonials will land here for review.
+        Share your collection link with a few happy customers, or import ones you already have from X, Bluesky
+        or your website. They'll land here for review.
       </EmptyState>
     );
   }
@@ -165,6 +166,7 @@ export const AdminCard = ({ t, next }: { t: Testimonial; next: string }) => {
         <time class="t-date" datetime={new Date(t.createdAt).toISOString()} title={formatDate(t.createdAt)}>
           {timeAgo(t.createdAt)}
         </time>
+        <SourceLink source={t.source} url={t.sourceUrl} />
 
         <div class="t-actions">
           <ActionForm

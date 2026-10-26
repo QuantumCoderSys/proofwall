@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { csrf } from 'hono/csrf';
 import { HTTPException } from 'hono/http-exception';
-import type { AppEnv } from './env';
+import type { AppEnv, Env } from './env';
 import { wantsJson } from './lib/auth';
+import { runDueImports } from './lib/auto-import';
 import { securityHeaders } from './lib/http';
 import api from './routes/api';
 import auth from './routes/auth';
@@ -69,4 +70,10 @@ app.onError((err, c) => {
   );
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  // Daily cron (see wrangler.toml): re-check saved import links for new testimonials.
+  scheduled(_controller, env, ctx) {
+    ctx.waitUntil(runDueImports(env));
+  },
+} satisfies ExportedHandler<Env>;
