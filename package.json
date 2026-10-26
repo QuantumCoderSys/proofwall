@@ -1,0 +1,39 @@
+{
+  "name": "proofwall",
+  "version": "1.0.0",
+  "description": "Self-hosted testimonial collector and Wall of Love for Cloudflare Workers.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "node scripts/build-client.mjs",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "deploy": "wrangler deploy && wrangler d1 migrations apply DB --remote",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.client.json",
+    "seed:local": "wrangler d1 execute DB --local --file=./scripts/seed.sql"
+  },
+  "dependencies": {
+    "hono": "^4.13.14"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261025.1",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.152.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "ADMIN_PASSWORD": {
+        "description": "Password for the founder dashboard. Use a long, unique passphrase."
+      },
+      "SESSION_SECRET": {
+        "description": "Random string used to sign session cookies. Generate one with `openssl rand -hex 32`."
+      },
+      "POWERED_BY_URL": {
+        "description": "Optional. Where the \"Powered by ProofWall\" badge links. Leave empty to link to this deployment."
+      }
+    }
+  }
+}

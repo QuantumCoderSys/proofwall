@@ -1,0 +1,8 @@
+/embed.js
+  Cache-Control: public, max-age=300, stale-while-revalidate=86400
+  Access-Control-Allow-Origin: *
+  Cross-Origin-Resource-Policy: cross-origin
+  X-Content-Type-Options: nosniff
+
+/assets/*
+  X-Content-Type-Options: nosniff

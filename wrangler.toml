@@ -1,0 +1,42 @@
+#:schema node_modules/wrangler/config-schema.json
+# ProofWall — Cloudflare Worker configuration.
+#
+# D1 and R2 resources are auto-provisioned by name on the first `wrangler deploy`
+# (Wrangler ≥ 4.45). If you'd rather create them yourself, run
+# `npx wrangler d1 create proofwall` and paste the returned id into `database_id`.
+
+name = "proofwall"
+main = "src/index.tsx"
+compatibility_date = "2026-10-01"
+upload_source_maps = true
+
+# Compiles the browser bundles (embed widget + dashboard helpers) into ./public
+# before every `wrangler dev` / `wrangler deploy`.
+[build]
+command = "node scripts/build-client.mjs"
+watch_dir = ["src/client", "src/widget", "src/shared"]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "proofwall"
+# database_id = "<optional: paste the id from `wrangler d1 create proofwall`>"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "proofwall-media"
+
+[vars]
+# Where "Powered by ProofWall" links to. Leave empty to link to this deployment's homepage.
+POWERED_BY_URL = ""
+
+[observability]
+enabled = true
+
+# Secrets (set with `npx wrangler secret put <NAME>`; see .env.example):
+#   ADMIN_PASSWORD  – the founder's dashboard password (required)
+#   SESSION_SECRET  – random string used to sign session cookies (required)
