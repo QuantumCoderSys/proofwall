@@ -1,58 +1,72 @@
-# ProofWall
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo.svg" alt="ProofWall" height="48">
+  </picture>
+</p>
 
-**Collect testimonials. Show them anywhere.**
-A small, self-hosted testimonial collector and Wall of Love that runs entirely on Cloudflare's free tier: Workers + Hono, D1 and R2. MIT licensed. One founder per deployment, and customers don't need accounts.
+<p align="center">
+  <strong>Collect testimonials. Show them anywhere.</strong><br>
+  An open-source, self-hosted testimonial collector and Wall of Love. MIT licensed.
+</p>
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/QuantumCoderSys/proofwall)
-&nbsp;
-[![Set up with your AI agent: copy the prompt](https://img.shields.io/badge/Set_up_with_your_AI_agent-copy_the_prompt-171717?style=for-the-badge&logo=anthropic&logoColor=white)](#set-up-with-an-ai-agent)
+<p align="center">
+  <a href="#deploy-with-your-ai-agent"><img src="https://img.shields.io/badge/Deploy_with_your_AI_agent-copy_the_prompt-171717?style=for-the-badge" alt="Deploy with your AI agent"></a>
+</p>
 
 ![ProofWall dashboard](docs/screenshots/dashboard.jpg)
 
----
-
-## At a glance
-
-### Data model (D1)
-
-| Table          | What it holds                                                                                                                                                                            |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `spaces`       | One row per product or brand. Fields: `slug` (public URL), `name`, `logo_key` (R2), `accent_color`, form copy (`headline`, `prompt`, `thank_you`), and flags `collect_photo`, `is_accepting`, `show_branding`. |
-| `testimonials` | `space_id`, `status` (`pending` → `approved` / `rejected`), `rating` (1–5, or empty for imported posts), `body`, optional `author_name` / `author_role`, `photo_key` (R2), `featured` (pinned first), and for imports `source` (`web` / `x` / `bluesky`), `source_url` and `external_id` (used to skip duplicates). Plus timestamps. |
-| `import_sources` | Links that are re-checked daily for new testimonials, with the result of the last check.                                                                                              |
-| `import_skips` | Imported testimonials you deleted, so a re-check never brings them back.                                                                                                                 |
-| `rate_limits`  | Fixed-window counters for login attempts and public submissions. IPs are stored as SHA-256 hashes.                                                                                       |
-
-Uploaded images live in **R2** under `photos/<random>.<ext>` and `logos/<random>.<ext>`. Keys are never reused, so the files are served as immutable. The schema is in [`migrations/`](migrations).
-
-### Key routes
-
-| Route                                  | Who      | Purpose                                                                   |
-| -------------------------------------- | -------- | ------------------------------------------------------------------------- |
-| `GET /c/:slug` · `POST /c/:slug`       | Public   | Collection form (rating, text, name, role, photo, consent)                |
-| `GET /w/:slug`                         | Public   | Wall of Love page (approved only, can be iframed)                         |
-| `GET /embed.js`                        | Public   | The embeddable widget (one script tag)                                    |
-| `GET /api/v1/spaces/:slug`             | Public   | Approved testimonials as JSON. CORS `*`, cached 60s. Accepts `?limit=` and `?id=` |
-| `GET /media/*`                         | Public   | Photos and logos from R2                                                  |
-| `GET /login` · `POST /login` · `POST /logout` | Founder | Password sign-in (signed, HttpOnly session cookie)                 |
-| `GET /app`                             | Founder  | Overview: totals, the review queue across spaces, and the list of spaces |
-| `GET /app/spaces/:id`                  | Founder  | Moderate: approve, reject, pin, move back to pending, delete              |
-| `GET /app/spaces/:id/import`           | Founder  | Import from a link (preview, then pick), the daily-checked links, and add by hand |
-| `GET /app/spaces/:id/share`            | Founder  | Links, embed builder with a live preview, JSON endpoint                   |
-| `GET /app/spaces/:id/settings`         | Founder  | Branding, form copy, toggles, delete space                                |
-| Cron `23 7 * * *`                      | Worker   | Re-checks saved import links once a day                                   |
+Share a link and your customers leave a rating, a few words and a photo, without signing up. You approve the ones you like, and they appear on a Wall of Love page and in a one-line embed on your site. One founder per deployment, and it fits in free tiers.
 
 ---
 
-## Features
+## Deploy with your AI agent
 
-- **Dashboard**: create spaces (name, logo, accent colour), review a moderation inbox, approve or reject in one click, pin favourites, and copy embed code.
-- **Collection form**: mobile-first, with a 1–5 star rating, text, optional name, role and photo. Photos are cropped and resized in the browser, which also strips EXIF/GPS data. Customers give explicit publishing consent, and a honeypot plus rate limiting keep spam out.
-- **Import from the web, for free**: paste a review page, a post on X or Bluesky, or your own site's testimonials page. ProofWall pulls the testimonials out itself, with no scraping service or API keys. Saved links are re-checked daily, and new finds wait in your inbox. See [Import from the web](#import-from-the-web).
-- **Wall of Love**: a public, SEO-friendly page for each space, with an average rating and a masonry layout.
-- **Embeddable widget**: **wall**, **carousel** and **single card** layouts in light, dark or auto themes. It renders inside Shadow DOM, so your site's CSS can't break it. About 6 KB gzipped.
-- **"Powered by ProofWall"**: a small, optional badge. Turn it off per space.
-- **No paid services**: Workers, D1 and R2 free tiers are plenty for most founders.
+Paste this into Claude Code, Codex, Cursor or any coding agent that can run commands. It asks where you want to host ProofWall and what password you want, then does the rest.
+
+```text
+Deploy ProofWall for me: an open-source, self-hosted testimonial
+collector.
+
+Repository: https://github.com/QuantumCoderSys/proofwall
+
+1. Clone the repository and read AGENTS.md. It is the setup
+   playbook; follow it exactly.
+2. Ask me where to host it, recommending something I already use:
+   - Cloudflare Workers (free tier; uses D1 and R2), or
+   - any Docker or Node 22+ host with a persistent disk
+     (Fly.io, Railway, Render, a VPS, Coolify, ...).
+   If I pick a host with no persistent storage (Vercel, Netlify),
+   explain why it won't work and suggest one of the above.
+3. Ask me for the dashboard password, and an optional custom domain.
+4. Deploy with the AGENTS.md steps for that host: generate a fresh
+   SESSION_SECRET, store both secrets in the host's secret manager,
+   set up persistent storage, and attach my domain if I gave one.
+5. Verify: the site loads over HTTPS, /login says "Welcome back",
+   and signing in reaches the dashboard.
+
+Never print, log or commit secret values. When you're done, tell
+me the URL, how to sign in, and how to update later.
+```
+
+| Where it runs | Notes |
+| --- | --- |
+| **Cloudflare Workers** (recommended) | Free tier, global, with no server to look after. Data lives in D1 and uploads in R2. |
+| **Any Docker or Node 22+ host** | Fly.io, Railway, Render, DigitalOcean, Hetzner, a home server, Coolify or Dokku. Data is a SQLite file and an uploads folder on a persistent volume. |
+| ~~Vercel, Netlify~~ | Not supported: their functions have no persistent disk. |
+
+Prefer doing it yourself? [AGENTS.md](AGENTS.md) has the exact commands for each host.
+
+---
+
+## What you get
+
+- **Collection form**: mobile-first, with stars, text, name, role and photo. Photos are cropped in the browser and their location data is stripped. Customers give explicit publishing consent, and spam is filtered.
+- **Moderation inbox**: approve, reject or pin in one click, without page reloads.
+- **Wall of Love**: a public page for each space, with your logo and accent colour.
+- **Embeds**: wall, carousel and single-card layouts in light, dark or auto themes. One script tag; your site's CSS can't break it. About 6 KB.
+- **Import what you already have**: pull testimonials from review sites, posts on X and Bluesky, or your own website, and re-check those links daily. No paid APIs.
+- **Spaces**: one per product, each with its own link, wall and branding.
 
 | Collection form | Wall of Love |
 | --- | --- |
@@ -64,251 +78,94 @@ Uploaded images live in **R2** under `photos/<random>.<ext>` and `logos/<random>
 
 ---
 
-## Set up with an AI agent
+## Embed on your site
 
-Let your coding agent (Claude Code, Codex, Cursor and others) do the whole setup. Copy this prompt with the copy button on the box and paste it into your agent. It will ask you for a password and an optional domain before deploying anything.
+Copy your snippet from **Share & embed** in the dashboard. It looks like this:
 
-```text
-Set up ProofWall for me: a self-hosted testimonial collector
-that runs on my Cloudflare account.
+```html
+<script src="https://your-proofwall.com/embed.js" data-space="your-slug" data-layout="carousel" async></script>
+```
 
-Repository: https://github.com/QuantumCoderSys/proofwall
+The widget renders inside a Shadow DOM, shows **approved testimonials only**, and inserts all text as plain text, never HTML. Approvals show up within about a minute. If there's nothing approved yet, it renders nothing at all.
 
-1. Clone the repository and read AGENTS.md. It has the exact
-   setup steps; follow them.
-2. Before deploying, ask me for:
-   a. the dashboard password I want to use,
-   b. a custom domain, if I want one (its parent domain must
-      already be on my Cloudflare account),
-   c. which Cloudflare account to use, if I have more than one.
-3. Check that Node 20+ is installed and that Wrangler is logged
-   in (run `npx wrangler login` if not; I'll approve it in my
-   browser).
-4. Deploy: create the D1 database and R2 bucket, set
-   ADMIN_PASSWORD (mine) and a freshly generated SESSION_SECRET
-   as Worker secrets, attach my custom domain if I gave one, and
-   apply the D1 migrations.
-5. Verify: the site loads over HTTPS, /login shows
-   "Welcome back", and `wrangler secret list` shows both secrets.
+| Attribute | Values | Default |
+| --- | --- | --- |
+| `data-layout` | `wall` · `carousel` · `card` | `wall` |
+| `data-theme` | `light` · `dark` · `auto` | `light` |
+| `data-limit` | `1`–`100` | 50 / 20 / 10 |
+| `data-id` | pin a `card` to one testimonial | — |
+| `data-autoplay` | `false` to stop auto-advance | on |
+| `data-font` | `inherit` to use your site's font | Geist |
 
-Never print, log or commit secret values, and don't add my
-domain to wrangler.toml. When you're done, tell me the URL and
-how to sign in.
+You can also place `<div data-proofwall="your-slug" data-layout="wall"></div>` anywhere and load `embed.js` once, or call `window.ProofWall.mount(element, { space, layout, theme })`. On platforms that don't allow scripts, iframe the Wall of Love page at `/w/your-slug`. Approved testimonials are also available as JSON at `/api/v1/spaces/your-slug` (CORS-enabled).
+
+---
+
+## Import testimonials you already have
+
+In a space, open **Import** and paste a link. ProofWall fetches the page itself, shows what it found, and lets you pick which to keep.
+
+- **Review pages** that publish schema.org review data, such as Product Hunt, Capterra and Sitejabber
+- **Posts on X and Bluesky**, through their free public embeds
+- **Your own website**: `<blockquote>` testimonials and embedded posts
+
+Tick **Check this page daily** to pick up new ones automatically. They arrive as pending, so nothing goes public without you. Sites that block bots, like G2, Yelp, Trustpilot, LinkedIn and Google reviews, can't be imported; use **Add one by hand** for those. Imported testimonials link back to the original ("via X").
+
+---
+
+## How it works
+
+TypeScript throughout: [Hono](https://hono.dev) with server-rendered JSX, a tiny progressive-enhancement script, and a dependency-free widget. The same code runs on Cloudflare Workers and on Node.
+
+| Table | Holds |
+| --- | --- |
+| `spaces` | Name, public slug, logo, accent colour, form wording, toggles |
+| `testimonials` | Status (`pending` / `approved` / `rejected`), rating (optional for imports), text, author, photo, pinned flag, import source |
+| `import_sources` · `import_skips` | Links that are re-checked daily, and deleted imports that shouldn't return |
+| `rate_limits` | Login and submission throttling (hashed IPs) |
+
+| Route | Purpose |
+| --- | --- |
+| `/c/:slug` | Public collection form |
+| `/w/:slug` | Public Wall of Love |
+| `/embed.js` · `/api/v1/spaces/:slug` | Widget and JSON API |
+| `/app` | Founder dashboard (password sign-in) |
+
+```
+src/
+  routes/     pages and API (auth, public, dashboard, api, media)
+  views/      server-rendered JSX: design system, pages
+  lib/        data access, auth, uploads, importer, rate limits
+  widget/     embed.js
+  client/     dashboard enhancements
+  node/       Node/Docker runtime: SQLite, file storage, server
+migrations/   SQL schema, applied on deploy (Cloudflare) or start (Node)
 ```
 
 ---
 
-## Quick start (local)
-
-Requirements: Node 20+ and npm.
+## Develop locally
 
 ```bash
 npm install
-cp .env.example .dev.vars          # then edit ADMIN_PASSWORD and SESSION_SECRET
-npm run db:migrate:local           # create tables in the local D1
-npm run seed:local                 # optional: sample spaces & testimonials
-npm run dev                        # http://localhost:8787
+cp .env.example .dev.vars        # set ADMIN_PASSWORD and SESSION_SECRET
+npm run db:migrate:local
+npm run seed:local               # optional sample data
+npm run dev                      # http://localhost:8787
+npm run typecheck
 ```
 
-Sign in at `http://localhost:8787/login` with your `ADMIN_PASSWORD`. Local D1 and R2 data live in `.wrangler/state`.
+To run the Node build instead: `npm run build:node`, then `ADMIN_PASSWORD=… SESSION_SECRET=… npm start` (it serves on port 8080 and stores data in `./data`).
 
 ---
 
-## Deploy to Cloudflare
+## Security
 
-### Option A: Deploy button
-
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/QuantumCoderSys/proofwall)
-
-Cloudflare copies this repo into your GitHub account, creates the D1 database and R2 bucket, asks for `ADMIN_PASSWORD` and `SESSION_SECRET` (read from `.env.example`), then builds and deploys with `npm run deploy`, which also applies the migrations. Every push to your copy redeploys automatically.
-
-Running your own fork? Swap the `url=` parameter in the button link for your repo's URL.
-
-### Option B: Wrangler CLI
-
-```bash
-npx wrangler login
-npx wrangler secret put ADMIN_PASSWORD      # your dashboard password
-npx wrangler secret put SESSION_SECRET      # paste the output of: openssl rand -hex 32
-npm run deploy                              # deploys, then applies D1 migrations
-```
-
-`wrangler.toml` lists the D1 database (`proofwall`) and the R2 bucket (`proofwall-media`) **without IDs**. Wrangler ≥ 4.45 creates them for you on the first deploy and remembers them afterwards.
-
-> **Prefer explicit resources?** Run `npx wrangler d1 create proofwall` and `npx wrangler r2 bucket create proofwall-media`, then paste the returned `database_id` into `wrangler.toml`.
-
-If `wrangler secret put` complains that the Worker doesn't exist yet, run `npm run deploy` once first. The dashboard will show setup instructions until both secrets are set.
-
-### Custom domain
-
-In the Cloudflare dashboard, go to **Workers & Pages → proofwall → Settings → Domains & Routes → Add → Custom domain**, for example `love.yourproduct.com`. Embed snippets automatically use whatever domain the dashboard is opened on.
-
-### Updating
-
-Pull new changes and run `npm run deploy` again. New migrations are applied automatically.
-
----
-
-## Import from the web
-
-Already have testimonials elsewhere? Open a space, go to **Import**, and paste a link. The Worker fetches the page itself, so there's no scraping service, API key or bill. You see everything it found, untick what you don't want, and import it as pending or approved.
-
-| Paste a link to… | What ProofWall reads |
-| --- | --- |
-| A review page | schema.org `Review` data in the page's JSON-LD. Tested with Product Hunt, Capterra and Sitejabber; many shops and review sites publish it. Ratings are converted to 5 stars. |
-| A post on **X** or **Bluesky** | The post's public oEmbed (free, no API key): text, author, @handle and date. |
-| Your own website | `<blockquote>` testimonials, with credit from `<cite>`, `<figcaption>` or a `<footer>` inside the quote, plus embedded X and Bluesky posts. |
-
-**Checked daily.** When importing from a page, keep **"Check this page daily"** ticked. A free [Cron Trigger](https://developers.cloudflare.com/workers/configuration/cron-triggers/) re-checks saved links once a day, and anything new arrives as **pending**, so nothing goes public without your approval. Duplicates are skipped, and a testimonial you delete won't come back. Hit **Check now** to run a check immediately.
-
-**Attribution.** Imported testimonials show a small "via X" or "via producthunt.com" link back to the original, on the wall and in embeds. Posts without stars simply show no stars, and they're left out of your average rating.
-
-**Limits.** Some sites block automated access, including G2, Yelp, Trustpilot, LinkedIn and Google reviews, and pages that only load reviews with JavaScript can't be read either. For those, use **Add one by hand**: paste the words, credit the author and link to the original. It's always free and always works.
-
----
-
-## How the embed works
-
-Paste one tag where testimonials should appear:
-
-```html
-<script src="https://love.yourproduct.com/embed.js" data-space="your-slug" data-layout="carousel" async></script>
-```
-
-1. `embed.js` (a static asset, cached for 5 minutes) finds its own `<script>` tag and inserts a `<proofwall-embed>` element right before it.
-2. It fetches `GET /api/v1/spaces/:slug`, which returns **approved testimonials only**, then renders them inside a **Shadow DOM**. Your page's CSS can't leak in, and the widget's CSS can't leak out.
-3. All testimonial text is inserted as text nodes, never as HTML, so a malicious submission can't inject script into your site.
-4. Approving or rejecting in the dashboard shows up on embeds within about a minute (the API cache TTL).
-
-If the space has no approved testimonials yet, or the slug doesn't exist, the widget renders nothing, so your site never shows an empty box.
-
-### Precise placement
-
-Put any number of placeholders on the page, then load the script once:
-
-```html
-<div data-proofwall="your-slug" data-layout="wall"></div>
-<div data-proofwall="your-slug" data-layout="card" data-theme="dark"></div>
-<script src="https://love.yourproduct.com/embed.js" async></script>
-```
-
-### Options
-
-| Attribute       | Values                          | Default | Notes                                                   |
-| --------------- | ------------------------------- | ------- | ------------------------------------------------------- |
-| `data-space`    | space slug                      | —       | Required in script-tag mode (`data-proofwall` on divs). |
-| `data-layout`   | `wall` · `carousel` · `card`    | `wall`  | `card` shows one testimonial and rotates between the top ones. |
-| `data-theme`    | `light` · `dark` · `auto`       | `light` | `auto` follows the visitor's OS setting.                |
-| `data-limit`    | `1`–`100`                       | 50 / 20 / 10 | How many testimonials to fetch (wall / carousel / card). |
-| `data-id`       | testimonial id                  | —       | Pin a `card` embed to one specific testimonial.        |
-| `data-autoplay` | `false`                         | on      | Disable carousel / card auto-advance. Auto-advance is always off for reduced-motion users. |
-| `data-font`     | `inherit`                       | Geist   | Use your site's font instead of loading Geist from Google Fonts. |
-
-Pinned testimonials appear first and are set in a serif face, which gives a wall some visual rhythm.
-
-### JavaScript API
-
-```js
-// After embed.js has loaded:
-window.ProofWall.mount(document.querySelector('#reviews'), {
-  space: 'your-slug',
-  layout: 'carousel',
-  theme: 'auto',
-});
-```
-
-### No-script platforms (Notion, some site builders)
-
-Embed the Wall of Love page as an iframe instead: `https://love.yourproduct.com/w/your-slug`. Collection and wall pages allow framing; the dashboard does not.
-
-### JSON API
-
-```bash
-curl https://love.yourproduct.com/api/v1/spaces/your-slug?limit=10
-```
-
-```json
-{
-  "space": { "slug": "your-slug", "name": "Acme", "accentColor": "#2563eb", "logoUrl": null,
-             "collectUrl": "…/c/your-slug", "wallUrl": "…/w/your-slug", "showBranding": true, "poweredByUrl": "…" },
-  "testimonials": [
-    { "id": "…", "rating": 5, "body": "…", "name": "Maya Okafor", "role": "Head of Growth",
-      "photoUrl": "…/media/photos/….webp", "featured": true, "source": null, "sourceUrl": null,
-      "createdAt": 1760000000000 },
-    { "id": "…", "rating": null, "body": "…", "name": "Jordan Kim", "role": "@jordank", "photoUrl": null,
-      "featured": false, "source": "x", "sourceUrl": "https://x.com/jordank/status/…", "createdAt": 1760000000000 }
-  ],
-  "stats": { "count": 42, "rated": 40, "average": 4.8 }
-}
-```
-
----
-
-## Configuration
-
-| Name             | Kind   | Required | Description                                                                  |
-| ---------------- | ------ | -------- | ---------------------------------------------------------------------------- |
-| `ADMIN_PASSWORD` | secret | yes      | Dashboard password. Changing it signs out all sessions.                      |
-| `SESSION_SECRET` | secret | yes      | Signs the session cookie. Generate with `openssl rand -hex 32`.              |
-| `POWERED_BY_URL` | var    | no       | Where the "Powered by ProofWall" badge links. Defaults to this deployment's homepage. |
-
-Bindings (`wrangler.toml`): `DB` (D1), `MEDIA` (R2) and `ASSETS` (static files in `public/`). A daily cron trigger (`[triggers]`) runs the import checks; remove it if you don't use imports.
-
----
-
-## Project structure
-
-```
-├── migrations/0001_init.sql     D1 schema
-├── public/                      Static assets served by Workers Assets
-│   ├── assets/app.css           Design system (light, card-based, Geist + Newsreader)
-│   ├── _headers                 Cache/CORS headers for embed.js
-│   └── favicon.svg
-├── scripts/
-│   ├── build-client.mjs         esbuild: widget → public/embed.js, dashboard JS → public/assets/app.js
-│   └── seed.sql                 Sample data for local development
-├── src/
-│   ├── index.tsx                Hono app, middleware, error pages
-│   ├── env.ts                   Binding types
-│   ├── routes/                  auth · public (form + wall) · api · media · dashboard
-│   ├── lib/                     db · auth · importer · auto-import · uploads · rate-limit · color · ids · http · format
-│   ├── views/                   Server-rendered JSX (hono/jsx): shell, components, pages
-│   ├── client/app.ts            Progressive enhancement (async moderation, copy, previews)
-│   ├── widget/embed.ts          The embeddable widget
-│   └── shared/                  Types and helpers shared by the Worker and the browser
-├── wrangler.toml
-└── .env.example
-```
-
-Everything is TypeScript. Pages are server-rendered with `hono/jsx` and work without JavaScript; `app.js` only adds polish, such as moderating without page reloads, copy buttons, image previews and the live embed preview.
-
-```bash
-npm run typecheck   # Worker + browser code
-npm run build       # browser bundles (also runs automatically on dev/deploy)
-```
-
----
-
-## Security notes
-
-- **Auth**: a single password, compared in constant time. Sessions are HMAC-signed, `HttpOnly`, `SameSite=Lax` cookies that last 30 days. Login is rate limited to 10 attempts per 15 minutes per IP.
-- **CSRF**: every form POST is checked against the `Origin` / `Sec-Fetch-Site` headers (Hono `csrf()`).
-- **Uploads**: files are identified by their magic bytes, not their extension. Photos are capped at 5 MB and logos at 2 MB. SVG is accepted for logos only and served with a `sandbox` CSP, so it can never run script.
-- **Spam**: a honeypot field, plus a limit of 5 submissions per IP, per space, every 10 minutes.
-- **Imports**: only you can trigger them, and only for http(s) links. They identify themselves with an honest `ProofWall/1.0` user agent and don't bypass sites that block bots. Imported text is stored and rendered as plain text, never HTML.
-- **Headers**: a CSP on every HTML page, and `frame-ancestors 'none'` plus `X-Frame-Options: DENY` on the dashboard.
-- **Privacy**: no third-party scripts or trackers. Visitor IPs are only ever stored hashed, in the rate-limit table.
-
----
-
-## Troubleshooting
-
-- **"Database not set up yet"**: run `npm run db:migrate:remote` (production) or `npm run db:migrate:local` (dev).
-- **"Almost there" on the login page**: `ADMIN_PASSWORD` and/or `SESSION_SECRET` aren't set. In dev, check `.dev.vars`. In production, run `wrangler secret put`.
-- **Embed shows nothing**: check that the slug matches the space's Public URL and that at least one testimonial is approved. The browser console prints a `[ProofWall]` warning if the request failed.
-
----
+- **Sign-in:** one password, compared in constant time. Sessions are HMAC-signed, HttpOnly cookies, and logins are rate limited.
+- **Forms and uploads:** every form is CSRF-checked by origin. Uploads are verified by their file contents, and SVG logos are sandboxed.
+- **Spam:** a honeypot field plus rate limits.
+- **Your data:** no third-party trackers. Visitor IPs are only stored hashed.
 
 ## License
 
-[MIT](LICENSE). Use it, fork it, ship it.
+[MIT](LICENSE)

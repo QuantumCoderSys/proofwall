@@ -1,0 +1,11 @@
+node_modules
+.wrangler
+.dev.vars
+.env
+.claude
+.git
+dist
+data
+docs
+public/embed.js
+public/assets/app.js

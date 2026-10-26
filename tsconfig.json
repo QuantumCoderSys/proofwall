@@ -16,5 +16,5 @@
     "noEmit": true
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["src/client", "src/widget"]
+  "exclude": ["src/client", "src/widget", "src/node"]
 }

@@ -6,6 +6,7 @@
 //   • posts on X and Bluesky, via their public oEmbed endpoints
 //   • <blockquote> testimonials on any page (with <cite>/<figcaption> for credit),
 //     including embedded tweets and Bluesky posts
+import { Parser } from 'htmlparser2';
 import { sha256Hex } from './ids';
 import type { ImportKind } from '../shared/source';
 
@@ -78,7 +79,7 @@ async function fromOEmbed(endpoint: string, url: string, kind: ImportKind, exter
   }
   if (!res.ok) throw new ImportError(`${label} couldn’t find that post. Is it public?`);
   const data = (await res.json()) as { author_name?: string; author_url?: string; html?: string };
-  const { quotes } = await scanHtml(new Response(data.html ?? '', { headers: { 'content-type': 'text/html' } }));
+  const { quotes } = scanHtml(data.html ?? '');
   const quote = quotes[0];
   if (!quote) throw new ImportError(`${label} returned that post without any text.`);
   const credit = parseCredit(quote.cite);
@@ -126,7 +127,7 @@ async function fromPage(url: string): Promise<ExtractResult> {
   if (Number(res.headers.get('content-length') ?? 0) > MAX_PAGE_BYTES) throw new ImportError('That page is too large to scan.');
 
   const finalUrl = res.url || url;
-  const { jsonLd, quotes } = await scanHtml(res);
+  const { jsonLd, quotes } = scanHtml(await readCapped(res));
 
   const reviews = await reviewsFromJsonLd(jsonLd, finalUrl);
   const seen = new Set(reviews.map((r) => fingerprint(r.body)));
@@ -191,104 +192,131 @@ interface RawQuote {
   link: string | null;
 }
 
-/** One streaming pass over the page collecting JSON-LD blocks and blockquotes. */
-async function scanHtml(res: Response): Promise<{ jsonLd: string[]; quotes: RawQuote[] }> {
+/** Reads a response body as text, refusing anything over MAX_PAGE_BYTES. */
+async function readCapped(res: Response): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) return '';
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_PAGE_BYTES) {
+      await reader.cancel();
+      throw new ImportError('That page is too large to scan.');
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+
+/**
+ * One pass over the page collecting JSON-LD blocks and blockquotes. Uses htmlparser2
+ * (pure JS) so the same code runs on Cloudflare Workers and Node.
+ */
+function scanHtml(html: string): { jsonLd: string[]; quotes: RawQuote[] } {
   const jsonLd: string[] = [];
   const quotes: RawQuote[] = [];
   const figures: RawQuote[] = [];
+  // What each open element started, so its closing tag can undo exactly that.
+  const open: Array<{ name: string; figure?: RawQuote; quote?: { group: RawQuote; standalone: boolean }; credit?: boolean; paragraph?: boolean; ld?: boolean }> = [];
   let quote: RawQuote | null = null;
   let ld: string | null = null;
   let creditDepth = 0;
   let paragraphDepth = 0;
 
-  const target = () => quote ?? figures[figures.length - 1] ?? null;
   const commit = (q: RawQuote) => {
     if (normalize(q.body).length >= MIN_BODY) quotes.push(q);
   };
 
-  const rewriter = new HTMLRewriter()
-    .on('script[type="application/ld+json"]', {
-      element(el) {
-        ld = '';
-        el.onEndTag(() => {
-          if (ld) jsonLd.push(ld);
-          ld = null;
-        });
+  const parser = new Parser(
+    {
+      onopentag(name, attrs) {
+        const entry: (typeof open)[number] = { name };
+        if (name === 'script' && attrs.type === 'application/ld+json') {
+          ld = '';
+          entry.ld = true;
+        } else if (name === 'figure') {
+          entry.figure = { body: '', cite: '', embed: false, link: null };
+          figures.push(entry.figure);
+        } else if (name === 'blockquote' && !quote) {
+          const parent = figures[figures.length - 1];
+          const inFigure = Boolean(parent && !parent.body);
+          const group = inFigure ? parent! : { body: '', cite: '', embed: false, link: null };
+          group.embed = /twitter-tweet|bluesky-embed/.test(attrs.class ?? '');
+          quote = group;
+          entry.quote = { group, standalone: !inFigure };
+        } else if (quote && name === 'p') {
+          paragraphDepth++;
+          entry.paragraph = true;
+        } else if (quote && name === 'br') {
+          if (creditDepth === 0 && (!quote.embed || paragraphDepth > 0)) quote.body += '\n';
+        } else if (quote?.embed && name === 'a' && attrs.href && (X_POST.test(attrs.href) || BLUESKY_POST.test(attrs.href))) {
+          quote.link = attrs.href.split('?')[0]!;
+        }
+        if (name === 'cite' || name === 'figcaption' || (name === 'footer' && quote)) {
+          creditDepth++;
+          entry.credit = true;
+        }
+        if (!VOID_TAGS.has(name)) open.push(entry);
       },
-      text(t) {
-        if (ld !== null) ld += t.text;
-      },
-    })
-    .on('figure', {
-      element(el) {
-        const group: RawQuote = { body: '', cite: '', embed: false, link: null };
-        figures.push(group);
-        el.onEndTag(() => {
-          figures.pop();
-          if (group.body) commit(group);
-        });
-      },
-    })
-    .on('blockquote', {
-      element(el) {
-        if (quote) return; // nested quotes belong to the outer one
-        const cls = el.getAttribute('class') ?? '';
-        const parent = figures[figures.length - 1];
-        const inFigure = Boolean(parent && !parent.body);
-        const current: RawQuote = inFigure
-          ? parent!
-          : { body: '', cite: '', embed: false, link: null };
-        current.embed = /twitter-tweet|bluesky-embed/.test(cls);
-        quote = current;
-        el.onEndTag(() => {
-          quote = null;
-          if (!inFigure) commit(current);
-        });
-      },
-      text(t) {
-        const q = quote;
-        if (!q || creditDepth > 0) return;
-        // Embedded posts keep the post text in <p>; everything after it is the credit line.
-        if (q.embed && paragraphDepth === 0) q.cite += t.text;
-        else q.body += t.text;
-      },
-    })
-    .on('blockquote p, blockquote br', {
-      element(el) {
-        if (el.tagName === 'br') {
-          if (quote && creditDepth === 0 && (!quote.embed || paragraphDepth > 0)) quote.body += '\n';
+      ontext(text) {
+        if (ld !== null) {
+          ld += text;
           return;
         }
-        paragraphDepth++;
-        el.onEndTag(() => {
-          paragraphDepth--;
-          if (quote && creditDepth === 0) quote.body += '\n\n';
-        });
+        if (creditDepth > 0) {
+          const target = quote ?? figures[figures.length - 1];
+          if (target) target.cite += text;
+          return;
+        }
+        if (!quote) return;
+        // Embedded posts keep the post text in <p>; everything after it is the credit line.
+        if (quote.embed && paragraphDepth === 0) quote.cite += text;
+        else quote.body += text;
       },
-    })
-    .on('blockquote a[href]', {
-      element(el) {
-        const href = el.getAttribute('href') ?? '';
-        if (quote?.embed && (X_POST.test(href) || BLUESKY_POST.test(href))) quote.link = href.split('?')[0]!;
+      onclosetag(name) {
+        if (VOID_TAGS.has(name)) return;
+        const index = open.map((e) => e.name).lastIndexOf(name);
+        if (index === -1) return;
+        for (const entry of open.splice(index).reverse()) {
+          if (entry.ld) {
+            if (ld) jsonLd.push(ld);
+            ld = null;
+          }
+          if (entry.credit) creditDepth--;
+          if (entry.paragraph) {
+            paragraphDepth--;
+            if (quote && creditDepth === 0) quote.body += '\n\n';
+          }
+          if (entry.quote) {
+            quote = null;
+            if (entry.quote.standalone) commit(entry.quote.group);
+          }
+          if (entry.figure) {
+            figures.pop();
+            if (entry.figure.body) commit(entry.figure);
+          }
+        }
       },
-    })
-    .on('cite, figcaption, blockquote footer', {
-      element(el) {
-        creditDepth++;
-        el.onEndTag(() => {
-          creditDepth--;
-        });
-      },
-      text(t) {
-        const q = target();
-        if (q) q.cite += t.text;
-      },
-    });
+    },
+    { decodeEntities: true },
+  );
+  parser.write(html);
+  parser.end();
 
-  await rewriter.transform(res).arrayBuffer();
   return {
     jsonLd,
-    quotes: quotes.map((q) => ({ ...q, body: normalize(decodeEntities(q.body)), cite: normalize(decodeEntities(q.cite)) })),
+    quotes: quotes.map((q) => ({ ...q, body: normalize(q.body), cite: normalize(q.cite) })),
   };
 }
 

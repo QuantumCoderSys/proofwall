@@ -21,7 +21,12 @@ async function digest(value: string): Promise<ArrayBuffer> {
 export async function passwordMatches(env: Env, input: string): Promise<boolean> {
   if (!env.ADMIN_PASSWORD) return false;
   const [a, b] = await Promise.all([digest(input), digest(env.ADMIN_PASSWORD)]);
-  return crypto.subtle.timingSafeEqual(a, b);
+  // Constant-time compare of equal-length digests (portable: Workers and Node).
+  const x = new Uint8Array(a);
+  const y = new Uint8Array(b);
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x[i]! ^ y[i]!;
+  return diff === 0;
 }
 
 export async function startSession(c: Context<AppEnv>): Promise<void> {

@@ -21,7 +21,7 @@ const STAR = 'M12 2.5l2.94 5.96 6.56.95-4.75 4.63 1.12 6.54L12 17.5l-5.87 3.08 1
 const FONT_HREF =
   'https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap';
 const LOGO =
-  '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6.5" fill="currentColor"/><g fill="var(--pw-logo-ink)" transform="translate(0 -0.6)"><path d="M5.75 14.5C5.75 11.4 7.4 9 10 8l.45.95c-1.25.65-2.05 1.65-2.25 2.82A2.75 2.75 0 1 1 5.75 14.5Z"/><path d="M12.75 14.5c0-3.1 1.65-5.5 4.25-6.5l.45.95c-1.25.65-2.05 1.65-2.25 2.82a2.75 2.75 0 1 1-2.45 2.73Z"/></g></svg>';
+  '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8 2h8a6 6 0 0 1 6 6v5a6 6 0 0 1-6 6h-5.2l-4.3 3.3a.8.8 0 0 1-1.3-.63V18.7A6 6 0 0 1 2 13V8a6 6 0 0 1 6-6Z"/><g fill="var(--pw-logo-ink)"><rect x="5.5" y="9.5" width="6" height="6" rx="1.7"/><path d="M5.5 10.9C5.5 7.9 7.6 5.9 11 5.5l.2 2c-2 .4-3.2 1.4-3.5 2.8V11.1Z"/><rect x="12.5" y="9.5" width="6" height="6" rx="1.7"/><path d="M12.5 10.9C12.5 7.9 14.6 5.9 18 5.5l.2 2c-2 .4-3.2 1.4-3.5 2.8V11.1Z"/></g></svg>';
 const CHEVRON_LEFT =
   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>';
 const CHEVRON_RIGHT =
